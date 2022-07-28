@@ -1,0 +1,195 @@
+#importing the library 
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn import linear_model
+from sklearn.model_selection import train_test_split
+import sklearn.metrics as metrics
+from sklearn.preprocessing import PolynomialFeatures
+
+#datset source : https://www.kaggle.com/code/akdagmelih/multiplelinear-regression-fish-weight-estimation/data
+
+df = pd.read_csv('Fish.csv')
+print(' Dimensions of dataset = ', df.shape,'\n')
+
+#below statement will print first few observations 
+print (' First few records in data set are : \n ',df.head(),'\n' )
+
+#below statement will print n random  observations 
+print (' Few random records in data set are : \n ',df.sample(5),'\n' )
+
+'''
+Column Name	Details
+Species	Species name of fish
+Weight	Weight of fish in gram
+Length1	Vertical length in CM
+Length2	Diagonal length in CM
+Length3	Cross length in CM
+Height	Height in CM
+Width	Diagonal width in CM
+'''
+
+#giving appropriate names to columns 
+df.rename(columns= {'Length1':'LengthVer', 'Length2':'LengthDia', 'Length3':'LengthCro'}, inplace=True)
+df.head()
+
+# Some info about data set like : 
+print ( ' Some basic information about data set is : \n ') 
+df.info()
+print(('\n There are few missing values : '), df.isnull().values.any(),'\n')
+
+#Counting species 
+sp = df['Species'].value_counts()
+sp = pd.DataFrame(sp)
+sp.T
+
+sns.barplot(x=sp.index, y=sp['Species']);
+plt.xlabel('Species')
+plt.ylabel('Counts of Species')
+plt.show()
+
+print (' Correlation data : \n')
+df.corr()
+
+plt.rcParams["figure.figsize"] = (10,10)
+sns.heatmap(df.corr(), annot =True, linewidths=.5, cmap='YlGnBu')
+plt.title('Correlation Matrix')
+
+#Dropping vertical diagonal and cross length to avoid multicolinearity 
+df = df.drop(['LengthVer', 'LengthDia', 'LengthCro'], axis =1)
+
+print('New dimension of dataset is = ', df.shape)
+df.sample(5)
+
+graph = sns.pairplot(df, kind='scatter', hue='Species')
+
+print (' Important stats of current data set is : \n')
+df.describe().T
+
+"""
+**********************************
+       i/p - single column df
+**********************************
+       o/p - index of outlier
+**********************************
+"""
+def outlierDetection(dataframe):
+  Q1 = dataframe.quantile(0.25)
+  Q3 = dataframe.quantile(0.75)
+  IQR = Q3 - Q1
+  upperEnd = Q3 + 1.5 * IQR
+  lowerEnd = Q1 - 1.5 * IQR 
+  outlier = dataframe[(dataframe > upperEnd) | (dataframe < lowerEnd)]
+  return outlier
+
+#This is a useless piece of code, don't conclude anything based on this  
+for column in df.columns[1:]: 
+    print('\n Outliers in column are "%s" ' % column)
+    outlier = outlierDetection(df[column])
+    print(outlier)
+
+#Uselessness ends here lol !
+
+allSpecies = np.unique(df.Species)
+print (' All the species are : ',allSpecies)
+
+# I should find outlier for each species one by one 
+
+def speciesIteration(sp):
+  print('*'*25,f'This outlier is for {sp}','*'*25)
+  tempdf = df.drop(['Weight'], axis = 1 )
+  sns.boxplot(data= tempdf[tempdf.Species == sp ] )
+  plt.title(f'Outlier Detection For {sp} Species')
+  plt.show()
+
+  tempdf1 = df[df.Species == sp]
+  for column in tempdf1.columns[1:]: 
+      print('\nOutliers in column "%s" ' % column)
+      outlier = outlierDetection(tempdf1[column])
+      print(outlier)
+
+for i in range (0,len(allSpecies)):
+  x = allSpecies[i]
+  #print(x)
+  speciesIteration(x)
+
+df = df.drop([35,54,157,158])
+df.shape
+
+df[df.Weight<=0]
+
+df = df.drop([40])
+
+df[df.Height<=0]
+
+df[df.Width<=0]
+
+print('Final shape of your data frame is :',df.shape,'\n')
+
+#to check if there is a '0' value
+df.eq(0).any().any()
+
+dummySpecies = pd.get_dummies(df.Species)
+print ('Shape if dummy species is :', dummySpecies.shape,'\n')
+
+dummySpecies.sample(10)
+
+df2 = pd.concat([df, dummySpecies],axis = 1 )
+df2.sample(10)
+
+df2 = df2.drop(['Species','Whitefish'], axis = 'columns')
+df2.sample(10)
+
+x = df2.iloc[:,1:]
+y = df2[['Weight']]
+
+xTrain, xTest, yTrain, yTest = train_test_split(x,y, test_size = 0.2)
+print('x train shape = ', xTrain.shape)
+print('x test shape  = ', xTest.shape)
+print('y train shape = ', yTrain.shape)
+print('y test shape  = ', yTest.shape)
+
+def polynomial_plot(feature, label):
+  xCoordinates = feature
+  yCoordinates = np.squeeze(label)
+
+  linearFunction = np.poly1d(np.polyfit(xCoordinates, yCoordinates, 1))
+  quadraticFunction = np.poly1d(np.polyfit(xCoordinates, yCoordinates, 2))
+ 
+  values = np.linspace(xCoordinates.min(), xCoordinates.max(), len(xCoordinates))
+
+  plt.scatter(xCoordinates,yCoordinates, marker = '+', color='green')  
+  plt.plot(values, linearFunction(values), color='cyan', linestyle='dashed', label='Linear Function')
+  plt.plot(values, quadraticFunction(values), color='red', label='Quadratic Function')
+  plt.xlabel('%s From Test Data'%(feature.name))
+  plt.ylabel('Weight')
+  plt.rcParams["figure.figsize"] = (10,6)
+  plt.legend()
+  plt.title("Linear Vs Quadratic Function For Feature %s" % (feature.name))
+  plt.show()
+
+polynomial_plot(xTrain.Width, yTrain)
+
+polynomial_plot(xTrain.Height, yTrain)
+
+# if you want to use decision tree regressor, un comment this section 
+from sklearn.tree import DecisionTreeRegressor
+regressor = DecisionTreeRegressor(random_state=0)
+regressor.fit(xTrain,yTrain)
+
+'''
+# if you want to use random forest regressor, un comment this section 
+from sklearn.tree import RandomForestRegressor
+regressor = RandomForestRegressor(random_state=0)
+regressor.fit(xTrain,yTrain)
+'''
+
+predictions = regressor.predict(xTest)
+print('r2_score= ', metrics.r2_score(yTest, predictions)*100,'%')
+
+predictedWeight = pd.DataFrame(predictions, columns=['Predicted Weight'])
+actualWeight = pd.DataFrame(yTest)
+actualWeight = actualWeight.reset_index(drop=True)
+df_actual_vs_predicted = pd.concat([actualWeight,predictedWeight],axis =1)
+df_actual_vs_predicted.T
